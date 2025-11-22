@@ -40,7 +40,7 @@ Pagina paginas[MAX_PAGINAS];
 int pagina_atual = 0;
 int passos_atual = 0;
 int total_paginas_definidas = 0;
-int delayUs = 2000;  // Velocidade (microsegundos)
+int delayUs = 5000;  // Velocidade (microsegundos) - mais lento para calibração
 bool motor_movendo = false;
 bool parar_motor = false;
 int passos_restantes = 0;
@@ -129,15 +129,18 @@ void processarComando(String cmd) {
     parar_motor = true;
     passos_restantes = 0;
     
-    // Resetar posição
+    // Resetar posição - IMPORTANTE: zerar tudo
     passos_atual = 0;
     pagina_atual = 0;
     
-    // Limpar mapeamento (opcional - comentado para não perder dados)
-    // limpar_mapeamento();
+    // Limpar apenas a página 0 do mapeamento (resetar para recalibrar)
+    paginas[0].passos_acumulados = 0;
+    paginas[0].definida = false;
+    total_paginas_definidas = 0;
     
     Serial.println(F(">>> RESET: Posição definida como início (0 passos)"));
     Serial.println(F(">>> Página atual resetada para 0"));
+    Serial.println(F(">>> Mapeamento da página 0 limpo - marque novamente"));
     mostrar_status();
   }
   // Comando MARK
@@ -199,6 +202,14 @@ void processarComando(String cmd) {
 }
 
 void marcar_pagina() {
+  // Verificar se passos_atual está negativo (problema)
+  if (passos_atual < 0) {
+    Serial.println(F(">>> ERRO: Passos acumulados estão negativos!"));
+    Serial.println(F(">>> Use HOME para voltar ao início antes de marcar."));
+    Serial.println(F(">>> Ou execute RESET para recalibrar do zero."));
+    return;  // Não marcar se estiver negativo
+  }
+  
   // Marcar posição atual como fim da página atual
   paginas[pagina_atual].passos_acumulados = passos_atual;
   paginas[pagina_atual].definida = true;
@@ -219,6 +230,8 @@ void marcar_pagina() {
     int passos_pagina = passos_atual - paginas[pagina_atual - 1].passos_acumulados;
     Serial.print(F("    Passos da página: "));
     Serial.println(passos_pagina);
+  } else if (pagina_atual == 0) {
+    Serial.println(F("    (Página inicial)"));
   }
   
   // Avançar para próxima página
@@ -227,6 +240,10 @@ void marcar_pagina() {
     pagina_atual = MAX_PAGINAS - 1;
     Serial.println(F(">>> Aviso: Limite de páginas atingido!"));
   }
+  
+  Serial.print(F(">>> Próxima página: "));
+  Serial.print(pagina_atual);
+  Serial.println(F(" (mova o papel e marque quando estiver na posição)"));
   
   mostrar_status();
 }
@@ -247,7 +264,7 @@ void mover_passos(int passos, bool frente) {
   digitalWrite(DirY, direcao_atual);
   delayMicroseconds(100);  // Pequeno delay para direção estabilizar
   
-  // Executar passos de forma síncrona (bloqueante)
+  // Executar passos de forma síncrona (bloqueante) com feedback
   Serial.print(F(">>> Movendo "));
   Serial.print(passos);
   Serial.print(F(" passos "));
@@ -257,10 +274,20 @@ void mover_passos(int passos, bool frente) {
   passos_restantes = passos;
   parar_motor = false;
   
-  // Executar todos os passos agora (síncrono)
+  // Executar todos os passos agora (síncrono) com feedback periódico
   for (int i = 0; i < passos; i++) {
     executarPasso();
     passos_atual += (frente ? 1 : -1);
+    
+    // Feedback a cada 10 passos ou no início/fim
+    if (i == 0 || (i + 1) % 10 == 0 || i == passos - 1) {
+      Serial.print(F("  ["));
+      Serial.print(i + 1);
+      Serial.print(F("/"));
+      Serial.print(passos);
+      Serial.print(F("] Passos acumulados: "));
+      Serial.println(passos_atual);
+    }
     
     // Verificar se deve parar
     if (parar_motor) {
@@ -283,10 +310,27 @@ void ir_para_pagina(int pagina_destino) {
     return;
   }
   
-  // Se for página 0 e não estiver definida, assumir 0 passos
+  // Se for página 0 (HOME), sempre permitir
   if (pagina_destino == 0) {
     Serial.println(F(">>> Indo para HOME (Página 0)"));
-    mover_passos(abs(passos_atual), passos_atual < 0);
+    
+    // Se já está em 0, apenas confirmar
+    if (passos_atual == 0) {
+      Serial.println(F(">>> Já está no HOME"));
+      pagina_atual = 0;
+      mostrar_status();
+      return;
+    }
+    
+    // Mover de volta para 0
+    int passos_para_mover = abs(passos_atual);
+    if (passos_para_mover > 0) {
+      Serial.print(F(">>> Movendo "));
+      Serial.print(passos_para_mover);
+      Serial.print(F(" passos "));
+      Serial.println(passos_atual < 0 ? F("(frente)") : F("(trás)"));
+      mover_passos(passos_para_mover, passos_atual < 0);
+    }
     pagina_atual = 0;
     passos_atual = 0;
     Serial.println(F(">>> HOME alcançado (0 passos)"));

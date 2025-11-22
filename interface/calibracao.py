@@ -367,7 +367,19 @@ HTML_TEMPLATE = """
         
         function moveSteps(steps) {
             const cmd = steps > 0 ? `F:${steps}` : `B:${Math.abs(steps)}`;
+            addLog(`🔄 Movendo ${Math.abs(steps)} passos ${steps > 0 ? 'frente' : 'trás'}...`);
+            isMoving = true;  // Marcar como em movimento
             sendCommand(cmd);
+            // Atualizar status imediatamente após comando
+            setTimeout(() => {
+                getStatus();
+                // Parar atualização rápida após movimento (estimativa baseada no número de passos)
+                const estimatedTime = Math.abs(steps) * 5; // ~5ms por passo
+                setTimeout(() => {
+                    isMoving = false;
+                    getStatus();  // Última atualização
+                }, estimatedTime + 500);
+            }, 100);
         }
         
         function moveCustomSteps() {
@@ -525,12 +537,51 @@ HTML_TEMPLATE = """
             tbody.innerHTML = html;
         }
         
-        // Atualizar status periodicamente
-        setInterval(() => {
+        // Atualizar status periodicamente (mais frequente durante movimento)
+        let statusInterval = setInterval(() => {
             if (isConnected) {
                 getStatus();
             }
-        }, 2000);
+        }, 1000);  // Atualizar a cada 1 segundo para feedback mais rápido
+        
+        // Variável para rastrear se está em movimento
+        let isMoving = false;
+        
+        // Função para atualizar passos em tempo real durante movimento
+        async function updateStepsDuringMove() {
+            if (!isConnected || !isMoving) return;
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                if (data.success && data.current_steps !== undefined) {
+                    const currentSteps = data.current_steps;
+                    document.getElementById('currentSteps').textContent = currentSteps;
+                    const stepsDisplayEl = document.getElementById('stepsDisplay');
+                    if (stepsDisplayEl) {
+                        stepsDisplayEl.textContent = currentSteps;
+                    }
+                    
+                    // Destacar se passos são negativos
+                    const stepsEl = document.getElementById('currentSteps');
+                    if (currentSteps < 0) {
+                        stepsEl.style.color = '#dc3545';
+                        if (stepsDisplayEl) stepsDisplayEl.style.color = '#dc3545';
+                    } else {
+                        stepsEl.style.color = '#28a745';
+                        if (stepsDisplayEl) stepsDisplayEl.style.color = '#333';
+                    }
+                }
+            } catch (error) {
+                // Silenciar erros durante movimento
+            }
+        }
+        
+        // Atualizar passos mais frequentemente durante movimento
+        setInterval(() => {
+            if (isConnected && isMoving) {
+                updateStepsDuringMove();
+            }
+        }, 500);  // Atualizar a cada 500ms durante movimento
         
         // Inicializar
         addLog('Interface de calibração carregada');
