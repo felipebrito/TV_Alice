@@ -1,0 +1,16 @@
+# Bibliotecas necessárias para o projeto Alice TV
+# Instalar via Arduino IDE: Sketch > Include Library > Manage Libraries
+
+# Biblioteca para controle de motores de passo
+# Nome: AccelStepper
+# Autor: Mike McCauley
+# Versão: 1.64 ou superior
+# Link: https://www.airspayce.com/mikem/arduino/AccelStepper/
+
+# Biblioteca para controle remoto IR
+# Nome: IRremote
+# Autor: Armin Joachimsmeyer
+# Versão: 4.0.0 ou superior (compatível com Arduino Mega)
+# Link: https://github.com/Arduino-IRremote/Arduino-IRremote
+# Nota: Para Arduino Mega, usar versão 4.x que suporta pinos de interrupção corretamente
+
