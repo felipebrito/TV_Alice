@@ -86,6 +86,7 @@ void setup() {
   Serial.println(F("  CIMA10, CIMA100, CIMA400 - Mover N passos para cima"));
   Serial.println(F("  BAIXO10, BAIXO100, BAIXO400 - Mover N passos para baixo"));
   Serial.println(F("  MARK - Marcar página atual"));
+  Serial.println(F("  MARK:N - Marcar página específica N"));
   Serial.println(F("  GOTO:0, GOTO:1, ... - Ir para página N"));
   Serial.println(F("  SAVE - Salvar mapeamento"));
   Serial.println(F("  LOAD - Carregar mapeamento"));
@@ -112,16 +113,26 @@ void loop() {
 }
 
 void processarComando(String cmd) {
-  // RESET
+  // RESET - Define posição ATUAL como ponto inicial (página 0)
   if (cmd == "RESET") {
     motor_movendo = false;
     parar_motor = true;
+    
+    // IMPORTANTE: A posição atual vira o zero
+    // Não move o motor, apenas redefine a contagem
     passos_atual = 0;
     pagina_atual = 0;
-    paginas[0].passos_acumulados = 0;
-    paginas[0].definida = false;
+    
+    // Limpar mapeamento
+    for (int i = 0; i < MAX_PAGINAS; i++) {
+      paginas[i].passos_acumulados = 0;
+      paginas[i].definida = false;
+    }
     total_paginas_definidas = 0;
-    Serial.println(F(">>> RESET: Posição definida como início (0 passos)"));
+    
+    Serial.println(F(">>> RESET: Posição ATUAL definida como início (Página 0, 0 passos)"));
+    Serial.println(F(">>> A partir daqui, apenas movimentos CIMA são permitidos"));
+    Serial.println(F(">>> Use CIMA para avançar, BAIXO será bloqueado se resultar em negativos"));
     mostrar_status();
   }
   // STATUS
@@ -160,9 +171,19 @@ void processarComando(String cmd) {
   else if (cmd == "BAIXO400") {
     mover_passos(400, false);
   }
-  // MARK
+  // MARK - Marcar página atual
   else if (cmd == "MARK") {
     marcar_pagina();
+  }
+  // MARK:N - Marcar página específica N
+  else if (cmd.startsWith("MARK:")) {
+    int pagina = cmd.substring(5).toInt();
+    if (pagina >= 0 && pagina < MAX_PAGINAS) {
+      marcar_pagina_especifica(pagina);
+    } else {
+      Serial.print(F(">>> Página inválida: "));
+      Serial.println(pagina);
+    }
   }
   // GOTO:P
   else if (cmd.startsWith("GOTO:")) {
@@ -204,6 +225,21 @@ void mover_passos(int passos, bool frente) {
     return;
   }
   
+  // BLOQUEAR movimentos BAIXO que resultariam em passos negativos
+  if (!frente) {  // Se for movimento para BAIXO
+    if (passos_atual - passos < 0) {
+      Serial.println(F(">>> ERRO: Movimento BAIXO bloqueado!"));
+      Serial.print(F(">>> Passos atuais: "));
+      Serial.print(passos_atual);
+      Serial.print(F(", tentando mover: "));
+      Serial.println(passos);
+      Serial.println(F(">>> Isso resultaria em passos negativos!"));
+      Serial.println(F(">>> Use RESET para definir novo ponto inicial"));
+      Serial.println(F(">>> Ou use CIMA para avançar"));
+      return;
+    }
+  }
+  
   // Parar qualquer movimento anterior
   motor_movendo = false;
   parar_motor = false;
@@ -225,6 +261,13 @@ void mover_passos(int passos, bool frente) {
   for (int i = 0; i < passos; i++) {
     executarPasso();
     passos_atual += (frente ? 1 : -1);
+    
+    // Garantir que nunca fique negativo (segurança extra)
+    if (passos_atual < 0) {
+      passos_atual = 0;
+      Serial.println(F(">>> AVISO: Passos negativos detectados, corrigido para 0!"));
+      break;
+    }
     
     // Feedback a cada 10 passos ou no início/fim
     if (i == 0 || (i + 1) % 10 == 0 || i == passos - 1) {
@@ -250,37 +293,8 @@ void mover_passos(int passos, bool frente) {
 }
 
 void marcar_pagina() {
-  // Verificar se passos_atual está negativo
-  if (passos_atual < 0) {
-    Serial.println(F(">>> ERRO: Passos acumulados estão negativos!"));
-    Serial.println(F(">>> Use GOTO:0 para voltar ao início antes de marcar."));
-    Serial.println(F(">>> Ou execute RESET para recalibrar do zero."));
-    return;
-  }
-  
-  // Marcar posição atual
-  paginas[pagina_atual].passos_acumulados = passos_atual;
-  paginas[pagina_atual].definida = true;
-  
-  // Atualizar total
-  if (pagina_atual >= total_paginas_definidas) {
-    total_paginas_definidas = pagina_atual + 1;
-  }
-  
-  Serial.print(F(">>> Página "));
-  Serial.print(pagina_atual);
-  Serial.print(F(" marcada com "));
-  Serial.print(passos_atual);
-  Serial.println(F(" passos acumulados"));
-  
-  // Calcular passos desta página
-  if (pagina_atual > 0 && paginas[pagina_atual - 1].definida) {
-    int passos_pagina = passos_atual - paginas[pagina_atual - 1].passos_acumulados;
-    Serial.print(F("    Passos da página: "));
-    Serial.println(passos_pagina);
-  } else if (pagina_atual == 0) {
-    Serial.println(F("    (Página inicial)"));
-  }
+  // Marcar página atual na posição atual
+  marcar_pagina_especifica(pagina_atual);
   
   // Avançar para próxima página
   pagina_atual++;
@@ -294,6 +308,50 @@ void marcar_pagina() {
   Serial.println(F(" (mova o papel e marque quando estiver na posição)"));
   
   mostrar_status();
+}
+
+void marcar_pagina_especifica(int pagina) {
+  // Verificar se passos_atual está negativo (não deve acontecer, mas segurança)
+  if (passos_atual < 0) {
+    Serial.println(F(">>> ERRO: Passos acumulados estão negativos!"));
+    Serial.println(F(">>> Execute RESET para definir novo ponto inicial."));
+    return;
+  }
+  
+  if (pagina < 0 || pagina >= MAX_PAGINAS) {
+    Serial.print(F(">>> Página inválida: "));
+    Serial.println(pagina);
+    return;
+  }
+  
+  // Marcar posição atual para a página especificada
+  paginas[pagina].passos_acumulados = passos_atual;
+  paginas[pagina].definida = true;
+  
+  // Atualizar total
+  if (pagina >= total_paginas_definidas) {
+    total_paginas_definidas = pagina + 1;
+  }
+  
+  Serial.print(F(">>> Página "));
+  Serial.print(pagina);
+  Serial.print(F(" marcada com "));
+  Serial.print(passos_atual);
+  Serial.println(F(" passos acumulados"));
+  
+  // Calcular passos desta página
+  if (pagina > 0 && paginas[pagina - 1].definida) {
+    int passos_pagina = passos_atual - paginas[pagina - 1].passos_acumulados;
+    Serial.print(F("    Passos da página: "));
+    Serial.println(passos_pagina);
+  } else if (pagina == 0) {
+    Serial.println(F("    (Página inicial)"));
+  }
+  
+  // Atualizar página atual se necessário
+  if (pagina > pagina_atual) {
+    pagina_atual = pagina;
+  }
 }
 
 void ir_para_pagina(int pagina_destino) {
@@ -314,15 +372,19 @@ void ir_para_pagina(int pagina_destino) {
       return;
     }
     
-    // Mover de volta para 0
-    int passos_para_mover = abs(passos_atual);
-    if (passos_para_mover > 0) {
+    // Mover de volta para 0 (sempre BAIXO se passos_atual > 0)
+    if (passos_atual > 0) {
       Serial.print(F(">>> Movendo "));
-      Serial.print(passos_para_mover);
-      Serial.print(F(" passos "));
-      Serial.println(passos_atual < 0 ? F("(CIMA)") : F("(BAIXO)"));
-      mover_passos(passos_para_mover, passos_atual < 0);
+      Serial.print(passos_atual);
+      Serial.println(F(" passos (BAIXO)"));
+      mover_passos(passos_atual, false);  // false = BAIXO
+    } else {
+      // Se estiver negativo (não deveria, mas segurança)
+      Serial.println(F(">>> ERRO: Passos negativos detectados!"));
+      Serial.println(F(">>> Execute RESET para corrigir."));
+      return;
     }
+    
     pagina_atual = 0;
     passos_atual = 0;
     Serial.println(F(">>> HOME alcançado (0 passos)"));
