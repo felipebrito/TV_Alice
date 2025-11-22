@@ -151,7 +151,7 @@ void loop() {
 void girarFrente() {
   direcao_atual = HIGH;
   digitalWrite(DirX, direcao_atual);
-  digitalWrite(DirY, LOW);  // Y gira em direção oposta
+  digitalWrite(DirY, direcao_atual);  // Y gira na mesma direção
   motor_movendo = true;
   passos_restantes = -1;  // -1 = movimento contínuo
   parar_motor = false;
@@ -161,7 +161,7 @@ void girarFrente() {
 void girarTras() {
   direcao_atual = LOW;
   digitalWrite(DirX, direcao_atual);
-  digitalWrite(DirY, HIGH);  // Y gira em direção oposta
+  digitalWrite(DirY, direcao_atual);  // Y gira na mesma direção
   motor_movendo = true;
   passos_restantes = -1;  // -1 = movimento contínuo
   parar_motor = false;
@@ -216,7 +216,7 @@ void processarComandoSerial(String cmd) {
     if (passos > 0) {
       direcao_atual = HIGH;
       digitalWrite(DirX, direcao_atual);
-      digitalWrite(DirY, LOW);
+      digitalWrite(DirY, direcao_atual);  // Mesma direção
       motor_movendo = true;
       passos_restantes = passos;
       parar_motor = false;
@@ -231,7 +231,7 @@ void processarComandoSerial(String cmd) {
     if (passos > 0) {
       direcao_atual = LOW;
       digitalWrite(DirX, direcao_atual);
-      digitalWrite(DirY, HIGH);
+      digitalWrite(DirY, direcao_atual);  // Mesma direção
       motor_movendo = true;
       passos_restantes = passos;
       parar_motor = false;
