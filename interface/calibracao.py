@@ -695,9 +695,9 @@ def get_status():
                 match = re.search(r'(\d+)', line)
                 if match:
                     current_page = int(match.group(1))
-            # Passos acumulados
+            # Passos acumulados (pode ser negativo)
             elif 'Passos acumulados:' in line:
-                match = re.search(r'(\d+)', line)
+                match = re.search(r'(-?\d+)', line)
                 if match:
                     current_steps = int(match.group(1))
             # Total definidas
@@ -715,7 +715,10 @@ def get_status():
                         definida = '✓' in parts[3] if len(parts) > 3 else False
                         
                         if passos_str != '-' and passos_str:
-                            passos = int(passos_str)
+                            try:
+                                passos = int(passos_str)
+                            except ValueError:
+                                passos = 0
                             mapping.append({
                                 'numero': pagina_num,
                                 'passos': passos,
