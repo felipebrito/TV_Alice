@@ -105,16 +105,16 @@ void loop() {
     processarComando(cmd);
   }
   
-  // Executar movimento se necessário
-  if (motor_movendo && !parar_motor) {
-    if (passos_restantes > 0) {
-      executarPasso();
-      passos_restantes--;
-      passos_atual += (direcao_atual == HIGH ? 1 : -1);
-    } else {
+  // Executar movimento se necessário (síncrono - bloqueia até completar)
+  if (motor_movendo && !parar_motor && passos_restantes > 0) {
+    executarPasso();
+    passos_restantes--;
+    passos_atual += (direcao_atual == HIGH ? 1 : -1);
+    
+    // Se terminou, atualizar status
+    if (passos_restantes == 0) {
       motor_movendo = false;
       Serial.println(F(">>> Movimento completo!"));
-      mostrar_status();
     }
   }
   
@@ -124,9 +124,20 @@ void loop() {
 void processarComando(String cmd) {
   // Comando RESET
   if (cmd == "RESET") {
+    // Parar qualquer movimento
+    motor_movendo = false;
+    parar_motor = true;
+    passos_restantes = 0;
+    
+    // Resetar posição
     passos_atual = 0;
     pagina_atual = 0;
+    
+    // Limpar mapeamento (opcional - comentado para não perder dados)
+    // limpar_mapeamento();
+    
     Serial.println(F(">>> RESET: Posição definida como início (0 passos)"));
+    Serial.println(F(">>> Página atual resetada para 0"));
     mostrar_status();
   }
   // Comando MARK
@@ -159,6 +170,10 @@ void processarComando(String cmd) {
   else if (cmd.startsWith("GOTO:")) {
     int pagina = cmd.substring(5).toInt();
     ir_para_pagina(pagina);
+  }
+  // Comando HOME
+  else if (cmd == "HOME") {
+    ir_para_pagina(0);
   }
   // Comando SAVE
   else if (cmd == "SAVE") {
@@ -217,24 +232,65 @@ void marcar_pagina() {
 }
 
 void mover_passos(int passos, bool frente) {
+  if (passos <= 0) {
+    Serial.println(F(">>> Número de passos inválido!"));
+    return;
+  }
+  
+  // Parar qualquer movimento anterior
+  motor_movendo = false;
+  passos_restantes = 0;
+  
+  // Configurar direção
   direcao_atual = frente ? HIGH : LOW;
   digitalWrite(DirX, direcao_atual);
   digitalWrite(DirY, direcao_atual);
+  delayMicroseconds(100);  // Pequeno delay para direção estabilizar
+  
+  // Executar passos de forma síncrona (bloqueante)
+  Serial.print(F(">>> Movendo "));
+  Serial.print(passos);
+  Serial.print(F(" passos "));
+  Serial.println(frente ? F("(frente)") : F("(trás)"));
   
   motor_movendo = true;
   passos_restantes = passos;
   parar_motor = false;
   
-  Serial.print(F(">>> Movendo "));
-  Serial.print(passos);
-  Serial.print(F(" passos "));
-  Serial.println(frente ? F("(frente)") : F("(trás)"));
+  // Executar todos os passos agora (síncrono)
+  for (int i = 0; i < passos; i++) {
+    executarPasso();
+    passos_atual += (frente ? 1 : -1);
+    
+    // Verificar se deve parar
+    if (parar_motor) {
+      Serial.println(F(">>> Movimento interrompido!"));
+      break;
+    }
+  }
+  
+  motor_movendo = false;
+  passos_restantes = 0;
+  
+  Serial.print(F(">>> Concluído. Passos acumulados: "));
+  Serial.println(passos_atual);
 }
 
 void ir_para_pagina(int pagina_destino) {
   if (pagina_destino < 0 || pagina_destino >= MAX_PAGINAS) {
     Serial.print(F(">>> Página inválida: "));
     Serial.println(pagina_destino);
+    return;
+  }
+  
+  // Se for página 0 e não estiver definida, assumir 0 passos
+  if (pagina_destino == 0) {
+    Serial.println(F(">>> Indo para HOME (Página 0)"));
+    mover_passos(abs(passos_atual), passos_atual < 0);
+    pagina_atual = 0;
+    passos_atual = 0;
+    Serial.println(F(">>> HOME alcançado (0 passos)"));
+    mostrar_status();
     return;
   }
   
@@ -262,19 +318,21 @@ void ir_para_pagina(int pagina_destino) {
   
   mover_passos(abs(passos_para_mover), passos_para_mover > 0);
   pagina_atual = pagina_destino;
+  passos_atual = passos_destino;  // Atualizar passos atual para a posição da página
 }
 
 void executarPasso() {
   // Motor X
   digitalWrite(StepX, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(10);  // Pulso mínimo
   digitalWrite(StepX, LOW);
   
-  // Motor Y (mesma direção)
+  // Motor Y (mesma direção) - simultâneo
   digitalWrite(StepY, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(10);  // Pulso mínimo
   digitalWrite(StepY, LOW);
   
+  // Delay entre passos (velocidade)
   delayMicroseconds(delayUs);
 }
 

@@ -220,14 +220,19 @@ HTML_TEMPLATE = """
                     <div class="info-label">Página Atual</div>
                     <div class="info-value" id="currentPage">0</div>
                 </div>
-                <div class="info-box">
+                <div class="info-box" style="border-color: #28a745; background: #f0fff4;">
                     <div class="info-label">Passos Acumulados</div>
-                    <div class="info-value" id="currentSteps">0</div>
+                    <div class="info-value" id="currentSteps" style="color: #28a745; font-size: 28px;">0</div>
+                    <div style="font-size: 11px; color: #666; margin-top: 5px;">Desde o RESET</div>
                 </div>
                 <div class="info-box">
                     <div class="info-label">Páginas Definidas</div>
                     <div class="info-value" id="totalDefined">0</div>
                 </div>
+            </div>
+            <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                <strong>📏 Passos desde o RESET:</strong> <span id="stepsDisplay" style="font-weight: bold; font-size: 18px;">0</span>
+                <br><small>Use este valor para saber quantos passos você moveu desde o ponto inicial</small>
             </div>
         </div>
         
@@ -251,6 +256,7 @@ HTML_TEMPLATE = """
             <h2>📍 Marcação de Páginas</h2>
             <div class="btn-group">
                 <button class="btn btn-warning" onclick="resetPosition()">🔄 RESET</button>
+                <button class="btn btn-danger" onclick="goHome()">🏠 HOME (Página 0)</button>
                 <button class="btn btn-success" onclick="markPage()">✓ MARCAR PÁGINA</button>
                 <button class="btn btn-primary" onclick="goToPage()">➡️ IR PARA PÁGINA</button>
             </div>
@@ -259,6 +265,11 @@ HTML_TEMPLATE = """
                 <button class="btn btn-primary" onclick="goToPage()">Ir</button>
                 <button class="btn btn-primary" onclick="nextPage()">Próxima ▶</button>
                 <button class="btn btn-primary" onclick="prevPage()">◀ Anterior</button>
+            </div>
+            <div style="margin-top: 15px; padding: 15px; background: #e7f3ff; border-radius: 8px; border-left: 4px solid #2196F3;">
+                <strong>💡 Dica:</strong> Use os botões de movimento para posicionar o papel. 
+                Quando estiver na posição correta, clique em <strong>MARCAR PÁGINA</strong>.
+                Os passos acumulados são mostrados acima para referência.
             </div>
         </div>
         
@@ -389,6 +400,12 @@ HTML_TEMPLATE = """
             sendCommand('PREV');
         }
         
+        function goHome() {
+            if (confirm('Voltar para HOME (Página 0)?')) {
+                sendCommand('HOME');
+            }
+        }
+        
         function saveMapping() {
             sendCommand('SAVE');
         }
@@ -454,10 +471,25 @@ HTML_TEMPLATE = """
                 const response = await fetch('/status');
                 const data = await response.json();
                 if (data.success) {
-                    updateMappingDisplay(data.mapping);
-                    document.getElementById('currentPage').textContent = data.current_page || 0;
-                    document.getElementById('currentSteps').textContent = data.current_steps || 0;
-                    document.getElementById('totalDefined').textContent = data.total_defined || 0;
+                updateMappingDisplay(data.mapping);
+                const currentPage = data.current_page || 0;
+                const currentSteps = data.current_steps || 0;
+                
+                document.getElementById('currentPage').textContent = currentPage;
+                document.getElementById('currentSteps').textContent = currentSteps;
+                document.getElementById('stepsDisplay').textContent = currentSteps;
+                document.getElementById('totalDefined').textContent = data.total_defined || 0;
+                
+                // Destacar se passos são negativos (problema)
+                const stepsEl = document.getElementById('currentSteps');
+                const stepsDisplayEl = document.getElementById('stepsDisplay');
+                if (currentSteps < 0) {
+                    stepsEl.style.color = '#dc3545';
+                    stepsDisplayEl.style.color = '#dc3545';
+                } else {
+                    stepsEl.style.color = '#28a745';
+                    stepsDisplayEl.style.color = '#333';
+                }
                 }
             } catch (error) {
                 console.error('Erro ao obter status:', error);
